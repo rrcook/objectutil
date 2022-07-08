@@ -1,0 +1,4 @@
+%{
+  "ex_brace_expansion": {:git, "https://github.com/hez/ex_brace_expansion.git", "1466ede7b51cc0378acb12120de40543cf45f49d", [tag: "v0.0.3"]},
+  "ex_minimatch": {:git, "https://github.com/hez/ex_minimatch.git", "f2a1505734faff6ebe414e31046dae109b5bb015", [tag: "v0.0.3"]},
+}
