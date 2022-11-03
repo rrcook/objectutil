@@ -15,8 +15,9 @@
 
 defmodule ObjectUtil.Object do
   import ExMinimatch
+  import Logger
 
-  def parse_object(data, action, args, level \\ 0) do
+  def parse_object(data, action \\ nil, args \\ %{}, level \\ 0) do
     <<
       name::binary-size(8),
       ext::binary-size(3),
@@ -35,17 +36,25 @@ defmodule ObjectUtil.Object do
 
     filename = String.trim(name) <> "." <> String.trim(ext)
 
-    if match(args.glob, filename), do: action.(filename, sequence, type, length, set_size, candidacy_int, version_int, data, args)
+    if match(Map.get(args, :glob, "*"), filename) and action != nil, do: action.(filename, sequence, type, length, set_size, candidacy_int, version_int, data, args)
 
     try do
       if args.recurse, do: parse_segment(rest, action, args, level)
     rescue
-      _e in MatchError ->
-        IO.puts("ERROR: bad segments in #{filename}")
+      _ in MatchError ->
+        Logger.warn("bad segments in #{filename}")
+        throw {:invalid_segment, type}
+    catch
+      {:invalid_segment, type} ->
+        Logger.warn("invalid segment type #{type} in #{filename}")
+        throw {:invalid_segment, type}
+
     end
   end
 
   defp parse_segment(<<type, length::16-little, rest::binary>>, action, args, level) do
+    if type not in [0x01, 0x02, 0x03, 0x04, 0x0a, 0x0b, 0x0e, 0x10, 0x20, 0x21, 0x26, 0x27, 0x31, 0x33, 0x51, 0x52,
+      0x61, 0x62, 0x63, 0x64, 0x71], do: throw({:invalid_segment, type})
     data_length = length - 3
     <<data::binary-size(data_length), excess::binary>> = rest
     # type 0x52 == embedded object
