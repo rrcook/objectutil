@@ -4,6 +4,7 @@ defmodule Objectutil.MixProject do
   def project do
     [
       app: :objectutil,
+      escript: [main_module: ObjectUtil.CLI],
       version: "0.1.0",
       elixir: "~> 1.13",
       start_permanent: Mix.env() == :prod,
@@ -22,6 +23,8 @@ defmodule Objectutil.MixProject do
   defp deps do
     [
       {:ex_minimatch, git: "https://github.com/hez/ex_minimatch.git", tag: "v0.0.3"},
+      {:exprintf, "~> 0.2.0"},
+      {:enum_type, "~> 1.1.0"},
     ]
   end
 end
