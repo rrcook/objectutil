@@ -235,7 +235,8 @@ defmodule Segment do
   def segment_info(data) do
     <<
       type,
-      length::16-little
+      length::16-little,
+      _rest::binary
     >> = data
 
     {:ok, type, length}
@@ -383,8 +384,8 @@ defmodule PageElementSelectorSegment do
          }, rest2}
     end
 
-    <<parms_length::16-big, rest3>> = rest2
-    {:ok, parms_list, rest} = ObjecTypes.parse_parms(parms_length - 2, [], rest3)
+    <<parms_length::16-big, rest3::binary>> = rest2
+    {:ok, parms_list, rest} = ObjectTypes.parse_parms(parms_length - 2, [], rest3)
 
     {:ok, %PageElementSelectorSegment{segment_struct | parms: parms_list}, rest}
   end
@@ -453,7 +454,6 @@ defmodule ProgramCallSegment do
     <<
       segment,
       length::16-little,
-      partition_id,
       event,
       prefix,
       rest1::binary
@@ -489,8 +489,8 @@ defmodule ProgramCallSegment do
          }, rest2}
     end
 
-    <<parms_length::16-big, rest3>> = rest2
-    {:ok, parms_list, rest} = ObjecTypes.parse_parms(parms_length - 2, [], rest3)
+    <<parms_length::16-big, rest3::binary>> = rest2
+    {:ok, parms_list, rest} = ObjectTypes.parse_parms(parms_length - 2, [], rest3)
 
     {:ok, %ProgramCallSegment{segment_struct | parms: parms_list}, rest}
   end
