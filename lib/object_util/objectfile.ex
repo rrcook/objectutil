@@ -14,6 +14,7 @@
 # see <https://www.gnu.org/licenses/>.
 
 defmodule ObjectUtil.ObjectFile do
+  alias ObjectTypes.SegmentType
   alias ObjectUtil.Object
   require Logger
   import ExPrintf
@@ -123,7 +124,48 @@ defmodule ObjectUtil.ObjectFile do
   end
 
   def object_info(source) do
-    IO.puts("TBD")
+    with {:ok, file} <- File.open(source),
+        data <- IO.binread(file, :eof),
+         :ok <- File.close(file) do
+      # Do something with the contents of the file
+
+
+
+      # Find out the type of object from the 'header'
+      {:ok, %Header{} = header, rest} = Header.parse(data)
+
+      IO.inspect(header)
+
+      os_list = build_list([header], rest)
+
+      IO.inspect(os_list)
+    else
+      {:error, reason} ->
+        # Handle the case where the file couldn't be opened or read
+        IO.puts("Error: #{reason}")
+        :error
+    end
+  end
+
+  defp build_list(os_list, data) when byte_size(data) <= 0 do
+    os_list
+  end
+
+  defp build_list(os_list, data) do
+    {:ok, type, length} = Segment.segment_info(data)
+
+    segment_module = Map.get(ObjectTypes.segment_mod_map(), type, :unknown)
+
+    case segment_module do
+      :unknown ->
+        <<_dump_data::binary-size(length), rest>> = data
+        build_list(os_list, rest)
+      _ ->
+        {:ok, segment, rest} = segment_module.parse(data)
+
+        IO.inspect(segment)
+         build_list(os_list ++ [segment], rest)
+    end
   end
 
   defmodule Dir do
