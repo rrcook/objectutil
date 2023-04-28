@@ -1,5 +1,41 @@
+defmodule Header do
+  @derive Jason.Encoder
+  defstruct [:segment_type, :object_id, :object_type, :object_module, :length, :num_objects]
+
+  def parse(data) do
+    <<
+      name::binary-size(8),
+      ext::binary-size(3),
+      _sequence,
+      type,
+      length::16-little,
+      _not_used_1,
+      num_objects,
+      _not_used_2,
+      rest::binary
+    >> = data
+
+    {:ok,
+     %Header{
+       segment_type: :header,
+       object_id: String.trim(name) <> "." <> String.trim(ext),
+       object_type:
+         ObjectTypes.enum_value(Map.get(ObjectTypes.object_type_map(), type, :unkown)),
+       object_module: Map.get(ObjectTypes.object_mod_map(), type),
+       length: length,
+       num_objects: num_objects
+     }, rest}
+  end
+
+
+end
+
 defmodule ObjectTypes do
   use EnumType
+
+
+  def enum_value(:unknown), do: :unknown
+  def enum_value(enum_type), do: enum_type.value
 
   # Object Types
   defenum ObjectType do
@@ -187,32 +223,36 @@ defmodule ObjectTypes do
     parse_parms(bytes_remaining - length, parms_list ++ [parm_data], rest)
   end
 
-end
+  def parse_buffer(data) do
+    # Find out the type of object from the 'header'
+    {:ok, %Header{} = header, rest} = Header.parse(data)
 
-defmodule Header do
-  defstruct [:object_id, :object_type, :object_module, :length, :num_objects]
+    IO.inspect(header)
 
-  def parse(data) do
-    <<
-      name::binary-size(8),
-      ext::binary-size(3),
-      _sequence,
-      type,
-      length::16-little,
-      _not_used_1,
-      num_objects,
-      _not_used_2,
-      rest::binary
-    >> = data
+    os_list = build_list([header], rest)
+    IO.inspect(os_list)
+  end
 
-    {:ok,
-     %Header{
-       object_id: String.trim(name) <> "." <> String.trim(ext),
-       object_type: Map.get(ObjectTypes.object_type_map(), type, :unkown),
-       object_module: Map.get(ObjectTypes.object_mod_map(), type),
-       length: length,
-       num_objects: num_objects
-     }, rest}
+  defp build_list(os_list, data) when byte_size(data) <= 0 do
+    os_list
+  end
+
+  defp build_list(os_list, data) do
+    {:ok, type, length} = Segment.segment_info(data)
+
+    segment_module = Map.get(ObjectTypes.segment_mod_map(), type, :unknown)
+
+    case segment_module do
+      :unknown ->
+        <<_dump_data::binary-size(length), rest>> = data
+        build_list(os_list, rest)
+
+      _ ->
+        {:ok, segment, rest} = segment_module.parse(data)
+
+        IO.inspect(segment)
+        build_list(os_list ++ [segment], rest)
+    end
   end
 end
 
@@ -256,6 +296,7 @@ defmodule FieldLevelProgramCallSegment do
 end
 
 defmodule KeywordNavigationSegment do
+  @derive Jason.Encoder
   defstruct [:segment_type, :segment_length, :guide_bfd, :current_keyword]
 
   def parse(data) do
@@ -269,19 +310,20 @@ defmodule KeywordNavigationSegment do
       rest::binary
     >> = data
 
-    segment_type = Map.get(ObjectTypes.segment_type_map(), type, :unkown)
+    segment_type = ObjectTypes.enum_value(Map.get(ObjectTypes.segment_type_map(), type, :unkown))
 
     {:ok,
-    %KeywordNavigationSegment{
-      segment_type: segment_type,
-      segment_length: length,
-      guide_bfd: guide_bfd,
-      current_keyword: String.trim(current_keyword)
-    }, rest}
+     %KeywordNavigationSegment{
+       segment_type: segment_type,
+       segment_length: length,
+       guide_bfd: guide_bfd,
+       current_keyword: String.trim(current_keyword)
+     }, rest}
   end
 end
 
 defmodule PageElementCallSegment do
+  @derive Jason.Encoder
   defstruct [
     :segment_type,
     :segment_length,
@@ -301,7 +343,7 @@ defmodule PageElementCallSegment do
       rest1::binary
     >> = data
 
-    segment_type = Map.get(ObjectTypes.segment_type_map(), type, :unkown)
+    segment_type = ObjectTypes.enum_value(Map.get(ObjectTypes.segment_type_map(), type, :unkown))
 
     case Map.get(ObjectTypes.prefix_type_map(), prefix) do
       ObjectTypes.PrefixType.EXTERNAL_PFX ->
@@ -312,7 +354,7 @@ defmodule PageElementCallSegment do
            segment_type: segment_type,
            segment_length: length,
            partition_id: partition_id,
-           prefix_type: ObjectTypes.PrefixType.EXTERNAL_PFX,
+           prefix_type: ObjectTypes.enum_value(ObjectTypes.PrefixType.EXTERNAL_PFX),
            object_id: object_id
          }, rest}
 
@@ -327,7 +369,7 @@ defmodule PageElementCallSegment do
            segment_type: segment_type,
            segment_length: length,
            partition_id: partition_id,
-           prefix_type: ObjectTypes.PrefixType.EMBEDDED_PFX,
+           prefix_type: ObjectTypes.enum_value(ObjectTypes.PrefixType.EMBEDDED_PFX),
            segment_offset: offset
          }, rest}
     end
@@ -335,6 +377,7 @@ defmodule PageElementCallSegment do
 end
 
 defmodule PageElementSelectorSegment do
+  @derive Jason.Encoder
   defstruct [
     :segment_type,
     :segment_length,
@@ -355,43 +398,46 @@ defmodule PageElementSelectorSegment do
       rest1::binary
     >> = data
 
-    segment_type = Map.get(ObjectTypes.segment_type_map(), type, :unkown)
+    segment_type = ObjectTypes.enum_value(Map.get(ObjectTypes.segment_type_map(), type, :unkown))
 
-    {segment_struct, rest2} = case Map.get(ObjectTypes.prefix_type_map(), prefix) do
-      ObjectTypes.PrefixType.EXTERNAL_PFX ->
-        {:ok, object_id, rest2} = ObjectTypes.extract_object_id(rest1)
+    {segment_struct, rest2} =
+      case Map.get(ObjectTypes.prefix_type_map(), prefix) do
+        ObjectTypes.PrefixType.EXTERNAL_PFX ->
+          {:ok, object_id, rest2} = ObjectTypes.extract_object_id(rest1)
 
-         {%PageElementSelectorSegment{
-           segment_type: segment_type,
-           segment_length: length,
-           partition_id: partition_id,
-           prefix_type: ObjectTypes.PrefixType.EXTERNAL_PFX,
-           object_id: object_id
-         }, rest2}
+          {%PageElementSelectorSegment{
+             segment_type: segment_type,
+             segment_length: length,
+             partition_id: partition_id,
+             prefix_type: ObjectTypes.enum_value(ObjectTypes.PrefixType.EXTERNAL_PFX),
+             object_id: object_id
+           }, rest2}
 
-      ObjectTypes.PrefixType.EMBEDDED_PFX ->
-        <<
-          offset::16-little,
-          rest2::binary
-        >> = rest1
+        ObjectTypes.PrefixType.EMBEDDED_PFX ->
+          <<
+            offset::16-little,
+            rest2::binary
+          >> = rest1
 
-         {%PageElementSelectorSegment{
-           segment_type: segment_type,
-           segment_length: length,
-           partition_id: partition_id,
-           prefix_type: ObjectTypes.PrefixType.EMBEDDED_PFX,
-           segment_offset: offset
-         }, rest2}
-    end
+          {%PageElementSelectorSegment{
+             segment_type: segment_type,
+             segment_length: length,
+             partition_id: partition_id,
+             prefix_type: ObjectTypes.enum_value(ObjectTypes.PrefixType.EMBEDDED_PFX),
+             segment_offset: offset
+           }, rest2}
+      end
 
     <<parms_length::16-big, rest3::binary>> = rest2
     {:ok, parms_list, rest} = ObjectTypes.parse_parms(parms_length - 2, [], rest3)
 
-    {:ok, %PageElementSelectorSegment{segment_struct | parms: parms_list}, rest}
+    # {:ok, %PageElementSelectorSegment{segment_struct | parms: parms_list}, rest}
+    {:ok, %PageElementSelectorSegment{segment_struct | parms: "FIXME"}, rest}
   end
 end
 
 defmodule PageFormatCallSegment do
+  @derive Jason.Encoder
   defstruct [:segment_type, :segment_length, :prefix_type, :object_id, :segment_offset]
 
   def parse(data) do
@@ -402,7 +448,7 @@ defmodule PageFormatCallSegment do
       rest1::binary
     >> = data
 
-    segment_type = Map.get(ObjectTypes.segment_type_map(), type, :unkown)
+    segment_type = ObjectTypes.enum_value(Map.get(ObjectTypes.segment_type_map(), type, :unkown))
 
     case Map.get(ObjectTypes.prefix_type_map(), prefix) do
       ObjectTypes.PrefixType.EXTERNAL_PFX ->
@@ -412,7 +458,7 @@ defmodule PageFormatCallSegment do
          %PageFormatCallSegment{
            segment_type: segment_type,
            segment_length: length,
-           prefix_type: ObjectTypes.PrefixType.EXTERNAL_PFX,
+           prefix_type: ObjectTypes.PrefixType.EXTERNAL_PFX.value(),
            object_id: object_id
          }, rest}
 
@@ -426,7 +472,7 @@ defmodule PageFormatCallSegment do
          %PageFormatCallSegment{
            segment_type: segment_type,
            segment_length: length,
-           prefix_type: ObjectTypes.PrefixType.EMBEDDED_PFX,
+           prefix_type: ObjectTypes.PrefixType.EMBEDDED_PFX.value(),
            segment_offset: offset
          }, rest}
     end
@@ -440,6 +486,7 @@ defmodule PresentationDataSegment do
 end
 
 defmodule ProgramCallSegment do
+  @derive Jason.Encoder
   defstruct [
     :segment_type,
     :segment_length,
@@ -459,52 +506,60 @@ defmodule ProgramCallSegment do
       rest1::binary
     >> = data
 
-    segment_type = Map.get(ObjectTypes.segment_type_map(), segment, :unkown)
-    event_type = Map.get(ObjectTypes.event_type_map(), event, :unkown)
+    segment_type =
+      ObjectTypes.enum_value(Map.get(ObjectTypes.segment_type_map(), segment, :unkown))
 
-    {segment_struct, rest2} = case Map.get(ObjectTypes.prefix_type_map(), prefix) do
-      ObjectTypes.PrefixType.EXTERNAL_PFX ->
-        {:ok, object_id, rest2} = ObjectTypes.extract_object_id(rest1)
+    event_type = ObjectTypes.enum_value(Map.get(ObjectTypes.event_type_map(), event, :unkown))
 
-         {%ProgramCallSegment{
-           segment_type: segment_type,
-           segment_length: length,
-           event_type: event_type,
-           prefix_type: ObjectTypes.PrefixType.EXTERNAL_PFX,
-           object_id: object_id
-         }, rest2}
+    {segment_struct, rest2} =
+      case Map.get(ObjectTypes.prefix_type_map(), prefix) do
+        ObjectTypes.PrefixType.EXTERNAL_PFX ->
+          {:ok, object_id, rest2} = ObjectTypes.extract_object_id(rest1)
 
-      ObjectTypes.PrefixType.EMBEDDED_PFX ->
-        <<
-          offset::16-little,
-          rest2::binary
-        >> = rest1
+          {%ProgramCallSegment{
+             segment_type: segment_type,
+             segment_length: length,
+             event_type: event_type,
+             prefix_type: ObjectTypes.PrefixType.EXTERNAL_PFX.value(),
+             object_id: object_id
+           }, rest2}
 
-         {%ProgramCallSegment{
-           segment_type: segment_type,
-           segment_length: length,
-           event_type: event_type,
-           prefix_type: ObjectTypes.PrefixType.EMBEDDED_PFX,
-           segment_offset: offset
-         }, rest2}
-    end
+        ObjectTypes.PrefixType.EMBEDDED_PFX ->
+          <<
+            offset::16-little,
+            rest2::binary
+          >> = rest1
+
+          {%ProgramCallSegment{
+             segment_type: segment_type,
+             segment_length: length,
+             event_type: event_type,
+             prefix_type: ObjectTypes.PrefixType.EMBEDDED_PFX.value(),
+             segment_offset: offset
+           }, rest2}
+      end
 
     <<parms_length::16-big, rest3::binary>> = rest2
     {:ok, parms_list, rest} = ObjectTypes.parse_parms(parms_length - 2, [], rest3)
 
-    {:ok, %ProgramCallSegment{segment_struct | parms: parms_list}, rest}
+    # {:ok, %ProgramCallSegment{segment_struct | parms: parms_list}, rest}
+    {:ok, %ProgramCallSegment{segment_struct | parms: "FIXME"}, rest}
   end
 end
 
 defmodule EmbeddedObjectSegment do
+  @derive Jason.Encoder
   defstruct [:segment_type, :segment_length, :embedded_data]
 
   def parse(data) do
     <<
-      type,
+      segment,
       length::16-little,
       rest1::binary
     >> = data
+
+    segment_type =
+      ObjectTypes.enum_value(Map.get(ObjectTypes.segment_type_map(), segment, :unkown))
 
     # 'length' includes the segment type and length, so the length of the data
     # is 3 bytes less than 'length'
@@ -515,9 +570,10 @@ defmodule EmbeddedObjectSegment do
 
     {:ok,
      %EmbeddedObjectSegment{
-       segment_type: type,
+       segment_type: segment_type,
        segment_length: length,
-       embedded_data: embedded_data
+       # embedded_data: embedded_data
+       embedded_data: "FIXME"
      }, rest}
   end
 end
