@@ -25,6 +25,7 @@ defmodule Objectutil.MixProject do
       {:ex_minimatch, git: "https://github.com/hez/ex_minimatch.git", tag: "v0.0.3"},
       {:exprintf, "~> 0.2.0"},
       {:enum_type, "~> 1.1.0"},
+      {:jason, "~> 1.2.1"}
     ]
   end
 end
