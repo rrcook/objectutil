@@ -15,6 +15,8 @@ defmodule Header do
       rest::binary
     >> = data
 
+
+
     {:ok,
      %Header{
        segment_type: :header,
@@ -432,7 +434,8 @@ defmodule PageElementSelectorSegment do
     {:ok, parms_list, rest} = ObjectTypes.parse_parms(parms_length - 2, [], rest3)
 
     # {:ok, %PageElementSelectorSegment{segment_struct | parms: parms_list}, rest}
-    {:ok, %PageElementSelectorSegment{segment_struct | parms: "FIXME"}, rest}
+    parms_encoded = Enum.map(parms_list, &(Base.encode16(&1)))
+    {:ok, %PageElementSelectorSegment{segment_struct | parms: parms_encoded}, rest}
   end
 end
 
@@ -543,7 +546,9 @@ defmodule ProgramCallSegment do
     {:ok, parms_list, rest} = ObjectTypes.parse_parms(parms_length - 2, [], rest3)
 
     # {:ok, %ProgramCallSegment{segment_struct | parms: parms_list}, rest}
-    {:ok, %ProgramCallSegment{segment_struct | parms: "FIXME"}, rest}
+    parms_encoded = Enum.map(parms_list, &(Base.encode16(&1)))
+
+    {:ok, %ProgramCallSegment{segment_struct | parms: parms_encoded}, rest}
   end
 end
 
@@ -573,7 +578,7 @@ defmodule EmbeddedObjectSegment do
        segment_type: segment_type,
        segment_length: length,
        # embedded_data: embedded_data
-       embedded_data: "FIXME"
+       embedded_data: Base.encode16(embedded_data)
      }, rest}
   end
 end
