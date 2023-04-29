@@ -33,7 +33,7 @@ defmodule ObjectUtil.ObjectFile do
     try do
       case command do
         :dir -> object_dir(source, args)
-        :info -> object_info(source)
+        :info -> object_info(source, args)
         _ -> ObjectUtil.CLI.usage(:terse, "Command #{command} not implemented.")
       end
     rescue
@@ -122,7 +122,7 @@ defmodule ObjectUtil.ObjectFile do
     end
   end
 
-  def object_info(source) do
+  def object_info(source, args) do
     with {:ok, file} <- File.open(source),
         data <- IO.binread(file, :eof),
          :ok <- File.close(file) do
@@ -132,8 +132,14 @@ defmodule ObjectUtil.ObjectFile do
 
       IO.inspect(os_list)
 
-      json_list = Jason.encode!(os_list)
-      IO.inspect(json_list)
+      json_list = Jason.encode!(os_list, pretty: true)
+      dest = Map.get(args, :dest, "")
+
+      if (dest == "") do
+        IO.inspect(json_list)
+      else
+        File.write(dest, json_list)
+      end
     else
       {:error, reason} ->
         # Handle the case where the file couldn't be opened or read
