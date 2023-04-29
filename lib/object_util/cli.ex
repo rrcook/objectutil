@@ -160,7 +160,8 @@ defmodule ObjectUtil.CLI do
     args = %{
       glob: Map.get(args, :glob, "*"),
       recurse: Map.get(args, :recurse, false),
-      bytype: Map.get(args, :bytype, false)
+      bytype: Map.get(args, :bytype, false),
+      dest: Map.get(args, :dest, "")
     }
 
     IO.inspect args
