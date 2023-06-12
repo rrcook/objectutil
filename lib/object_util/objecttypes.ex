@@ -111,6 +111,15 @@ defmodule ObjectTypes do
     }
   end
 
+  def pdt_type_map() do
+    alias ObjectTypes.PresentationDataType
+
+    %{
+      0x01 => PresentationDataType.PD_NAPLPS,
+      0x02 => PresentationDataType.PD_ASCII
+    }
+  end
+
   def segment_mod_map() do
     %{
       0x01 => ProgramCallSegment,
@@ -169,6 +178,14 @@ defmodule ObjectTypes do
     end
 
     value EMBEDDED_OBJECT, :embedded_object do
+    end
+  end
+
+  defenum PresentationDataType do
+    value PD_NAPLPS, :presentation_data_naplps do
+    end
+
+    value PD_ASCII, :presentation_data_ascii do
     end
   end
 
@@ -292,6 +309,60 @@ defmodule CustomTextSegment do
 end
 
 defmodule FieldDefinitionSegment do
+  @derive Jason.Encoder
+  defstruct [
+    :segment_type,
+    :segment_length,
+    :field_state,
+    :field_format,
+    :origin,
+    :size,
+    :name,
+    :text_id,
+    :cursor_id,
+    :cursor_origin
+  ]
+
+  def parse(data) do
+    <<
+      type,
+      length::16-little,
+      field_state,
+      field_format,
+      origin::binary-size(3),
+      size::binary-size(3),
+      name,
+      text_id,
+      rest_cursor::binary
+    >> = data
+
+    segment_type = ObjectTypes.enum_value(Map.get(ObjectTypes.segment_type_map(), type, :unkown))
+    IO.puts("rc length is #{byte_size(rest_cursor)}")
+    IO.inspect(rest_cursor)
+
+    {cursor_id, cursor_origin, rest} = case rest_cursor do
+      <<>> -> {0x00, <<>>, rest_cursor}
+      <<0x00, rest::binary>> -> {0x00, <<>>, rest}
+      <<cursor_id, cursor_origin::binary-size(3), rest::binary>> ->
+        {cursor_id, cursor_origin, rest}
+    end
+
+    {:ok,
+     %FieldDefinitionSegment{
+       segment_type: segment_type,
+       segment_length: length,
+       field_state: field_state,
+       field_format: field_format,
+       origin: Base.encode16(origin),
+       size: Base.encode16(size),
+       name: name,
+       text_id: text_id,
+       cursor_id: cursor_id,
+       cursor_origin: Base.encode16(cursor_origin)
+     }, rest}
+
+  end
+
 end
 
 defmodule FieldLevelProgramCallSegment do
@@ -486,6 +557,36 @@ defmodule PartitionDefinitionSegment do
 end
 
 defmodule PresentationDataSegment do
+  @derive Jason.Encoder
+  defstruct [
+    :segment_type,
+    :segment_length,
+    :pdt_type,
+    :presentation_data
+  ]
+
+  def parse(data) do
+    <<
+      s_type,
+      length::16-little,
+      p_type,
+      presentation_data::binary-size(length - 4),
+      rest::binary
+    >> = data
+
+    segment_type = ObjectTypes.enum_value(Map.get(ObjectTypes.segment_type_map(), s_type, :unkown))
+
+    pdt_type = ObjectTypes.enum_value(Map.get(ObjectTypes.pdt_type_map(), p_type, :unknown))
+
+    {:ok,
+     %PresentationDataSegment{
+       segment_type: segment_type,
+       segment_length: length,
+       pdt_type: pdt_type,
+       presentation_data: Base.encode16(presentation_data)
+     }, rest}
+
+  end
 end
 
 defmodule ProgramCallSegment do
