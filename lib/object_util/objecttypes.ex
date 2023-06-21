@@ -1,40 +1,50 @@
 defmodule Header do
   @derive Jason.Encoder
-  defstruct [:segment_type, :object_id, :object_type, :object_module, :length, :num_objects]
+  defstruct [
+    :segment_type,
+    :object_id,
+    :sequence,
+    :object_type,
+    :object_module,
+    :length,
+    :candicacy_version_high,
+    :num_objects,
+    :candidacy_version_low
+  ]
 
   def parse(data) do
     <<
       name::binary-size(8),
       ext::binary-size(3),
-      _sequence,
+      sequence,
       type,
       length::16-little,
-      _not_used_1,
+      candicacy_version_high,
       num_objects,
-      _not_used_2,
+      candidacy_version_low,
       rest::binary
     >> = data
-
-
 
     {:ok,
      %Header{
        segment_type: :header,
        object_id: String.trim(name) <> "." <> String.trim(ext),
-       object_type:
-         ObjectTypes.enum_value(Map.get(ObjectTypes.object_type_map(), type, :unkown)),
+       sequence: sequence,
+       object_type: ObjectTypes.enum_value(Map.get(ObjectTypes.object_type_map(), type, :unkown)),
        object_module: Map.get(ObjectTypes.object_mod_map(), type),
        length: length,
-       num_objects: num_objects
+       candicacy_version_high: candicacy_version_high,
+       num_objects: num_objects,
+       candidacy_version_low: candidacy_version_low
      }, rest}
   end
 
-
+  def generate(%Header{} = header_struct) do
+  end
 end
 
 defmodule ObjectTypes do
   use EnumType
-
 
   def enum_value(:unknown), do: :unknown
   def enum_value(enum_type), do: enum_type.value
@@ -59,83 +69,113 @@ defmodule ObjectTypes do
     end
   end
 
+  @obj_type_map %{
+    0x00 => ObjectTypes.ObjectType.PFO,
+    0x04 => ObjectTypes.ObjectType.PTO,
+    0x08 => ObjectTypes.ObjectType.PEO,
+    0x0C => ObjectTypes.ObjectType.PGO,
+    0x0E => ObjectTypes.ObjectType.WEO
+  }
   def object_type_map() do
-    alias ObjectTypes.ObjectType
-
-    %{
-      0x00 => ObjectType.PFO,
-      0x04 => ObjectType.PTO,
-      0x08 => ObjectType.PEO,
-      0x0C => ObjectType.PGO,
-      0x0E => ObjectType.WEO
-    }
+    @obj_type_map
   end
 
+  @obj_mod_map %{
+    0x00 => PageFormatObject,
+    0x04 => PageTemplateObject,
+    0x08 => PageElementObject,
+    0x0C => ProgramObject,
+    0x0E => WindowElementObject
+  }
   def object_mod_map() do
-    %{
-      0x00 => PageFormatObject,
-      0x04 => PageTemplateObject,
-      0x08 => PageElementObject,
-      0x0C => ProgramObject,
-      0x0E => WindowElementObject
-    }
+    @obj_mod_map
   end
 
+  @obj_atom_map %{
+    page_template_object: 0x00,
+    page_format_object: 0x04,
+    page_element_object: 0x08,
+    program_object: 0x0C,
+    window_object: 0x0E
+  }
+  def object_atom_map() do
+    @obj_atom_map
+  end
+
+  @seg_type_map  %{
+    0x01 => ObjectTypes.SegmentType.PGM_CALL,
+    0x02 => ObjectTypes.SegmentType.FLD_LEVEL_PGM_CALL,
+    0x04 => ObjectTypes.SegmentType.FIELD_DEFINITION,
+    0x0A => ObjectTypes.SegmentType.CUSTOM_TEXT,
+    0x0B => ObjectTypes.SegmentType.CUSTOM_CURSOR,
+    0x20 => ObjectTypes.SegmentType.PAGE_ELEMENT_SELECTOR,
+    0x21 => ObjectTypes.SegmentType.PAGE_ELEMENT_CALL,
+    0x31 => ObjectTypes.SegmentType.PAGE_FORMAT_CALL,
+    0x33 => ObjectTypes.SegmentType.PTN_DEFINITION,
+    0x51 => ObjectTypes.SegmentType.PRES_DATA,
+    0x52 => ObjectTypes.SegmentType.EMBEDDED_OBJECT,
+    0x61 => ObjectTypes.SegmentType.PAGE_ELEMENT_CALL,
+    0x71 => ObjectTypes.SegmentType.KWD_NAV
+  }
   def segment_type_map() do
-    alias ObjectTypes.SegmentType
-
-    %{
-      0x01 => SegmentType.PGM_CALL,
-      0x02 => SegmentType.FLD_LEVEL_PGM_CALL,
-      0x04 => SegmentType.FIELD_DEFINITION,
-      0x0A => SegmentType.CUSTOM_TEXT,
-      0x0B => SegmentType.CUSTOM_CURSOR,
-      0x20 => SegmentType.PAGE_ELEMENT_SELECTOR,
-      0x21 => SegmentType.PAGE_ELEMENT_CALL,
-      0x31 => SegmentType.PAGE_FORMAT_CALL,
-      0x33 => SegmentType.PTN_DEFINITION,
-      0x51 => SegmentType.PRES_DATA,
-      0x52 => SegmentType.EMBEDDED_OBJECT,
-      0x61 => SegmentType.PAGE_ELEMENT_CALL,
-      0x71 => SegmentType.KWD_NAV
-    }
+    @seg_type_map
   end
+
+  @evt_type_map %{
+    0x02 => EventType.INITIALIZER,
+    0x04 => EventType.POST_PROCESSOR,
+    0x08 => EventType.HELP_PROCESSOR
+  }
 
   def event_type_map() do
-    alias ObjectTypes.EventType
-
-    %{
-      0x02 => EventType.INITIALIZER,
-      0x04 => EventType.POST_PROCESSOR,
-      0x08 => EventType.HELP_PROCESSOR
-    }
+    @evt_type_map
   end
 
+  @pres_type_map   %{
+    0x01 => PresentationDataType.PD_NAPLPS,
+    0x02 => PresentationDataType.PD_ASCII
+  }
   def pdt_type_map() do
-    alias ObjectTypes.PresentationDataType
-
-    %{
-      0x01 => PresentationDataType.PD_NAPLPS,
-      0x02 => PresentationDataType.PD_ASCII
-    }
+    @pres_type_map
   end
+
+  @seg_mod_map %{
+    0x01 => ProgramCallSegment,
+    0x02 => FieldLevelProgramCallSegment,
+    0x04 => FieldDefinitionSegment,
+    0x0A => CustomTextSegment,
+    0x0B => CustomCursorSegment,
+    0x20 => PageElementSelectorSegment,
+    0x21 => PageElementCallSegment,
+    0x31 => PageFormatCallSegment,
+    0x33 => PartitionDefinitionSegment,
+    0x51 => PresentationDataSegment,
+    0x52 => EmbeddedObjectSegment,
+    0x61 => ProgramDataSegment,
+    0x71 => KeywordNavigationSegment
+  }
 
   def segment_mod_map() do
-    %{
-      0x01 => ProgramCallSegment,
-      0x02 => FieldLevelProgramCallSegment,
-      0x04 => FieldDefinitionSegment,
-      0x0A => CustomTextSegment,
-      0x0B => CustomCursorSegment,
-      0x20 => PageElementSelectorSegment,
-      0x21 => PageElementCallSegment,
-      0x31 => PageFormatCallSegment,
-      0x33 => PartitionDefinitionSegment,
-      0x51 => PresentationDataSegment,
-      0x52 => EmbeddedObjectSegment,
-      0x61 => PageElementCallSegment,
-      0x71 => KeywordNavigationSegment
-    }
+    @seg_mod_map
+  end
+
+  @seg_atom_map %{
+    program_call: 0x01,
+    field_level_program_call: 0x02,
+    field_definition: 0x04,
+    custom_text: 0x0A,
+    custom_cursor: 0x0B,
+    page_element_selector: 0x20,
+    page_element_call: 0x21,
+    page_format_call: 0x31,
+    partition_definition: 0x33,
+    presentation_data: 0x51,
+    embedded_object: 0x52,
+    program_data: 0x61,
+    keyword_navigation: 0x71
+  }
+  def segment_atom_map() do
+    @seg_atom_map
   end
 
   # Segment types
@@ -340,12 +380,17 @@ defmodule FieldDefinitionSegment do
     IO.puts("rc length is #{byte_size(rest_cursor)}")
     IO.inspect(rest_cursor)
 
-    {cursor_id, cursor_origin, rest} = case rest_cursor do
-      <<>> -> {0x00, <<>>, rest_cursor}
-      <<0x00, rest::binary>> -> {0x00, <<>>, rest}
-      <<cursor_id, cursor_origin::binary-size(3), rest::binary>> ->
-        {cursor_id, cursor_origin, rest}
-    end
+    {cursor_id, cursor_origin, rest} =
+      case rest_cursor do
+        <<>> ->
+          {0x00, <<>>, rest_cursor}
+
+        <<0x00, rest::binary>> ->
+          {0x00, <<>>, rest}
+
+        <<cursor_id, cursor_origin::binary-size(3), rest::binary>> ->
+          {cursor_id, cursor_origin, rest}
+      end
 
     {:ok,
      %FieldDefinitionSegment{
@@ -360,9 +405,7 @@ defmodule FieldDefinitionSegment do
        cursor_id: cursor_id,
        cursor_origin: Base.encode16(cursor_origin)
      }, rest}
-
   end
-
 end
 
 defmodule FieldLevelProgramCallSegment do
@@ -505,7 +548,7 @@ defmodule PageElementSelectorSegment do
     {:ok, parms_list, rest} = ObjectTypes.parse_parms(parms_length - 2, [], rest3)
 
     # {:ok, %PageElementSelectorSegment{segment_struct | parms: parms_list}, rest}
-    parms_encoded = Enum.map(parms_list, &(Base.encode16(&1)))
+    parms_encoded = Enum.map(parms_list, &Base.encode16(&1))
     {:ok, %PageElementSelectorSegment{segment_struct | parms: parms_encoded}, rest}
   end
 end
@@ -574,7 +617,8 @@ defmodule PresentationDataSegment do
       rest::binary
     >> = data
 
-    segment_type = ObjectTypes.enum_value(Map.get(ObjectTypes.segment_type_map(), s_type, :unkown))
+    segment_type =
+      ObjectTypes.enum_value(Map.get(ObjectTypes.segment_type_map(), s_type, :unkown))
 
     pdt_type = ObjectTypes.enum_value(Map.get(ObjectTypes.pdt_type_map(), p_type, :unknown))
 
@@ -585,7 +629,6 @@ defmodule PresentationDataSegment do
        pdt_type: pdt_type,
        presentation_data: Base.encode16(presentation_data)
      }, rest}
-
   end
 end
 
@@ -647,7 +690,7 @@ defmodule ProgramCallSegment do
     {:ok, parms_list, rest} = ObjectTypes.parse_parms(parms_length - 2, [], rest3)
 
     # {:ok, %ProgramCallSegment{segment_struct | parms: parms_list}, rest}
-    parms_encoded = Enum.map(parms_list, &(Base.encode16(&1)))
+    parms_encoded = Enum.map(parms_list, &Base.encode16(&1))
 
     {:ok, %ProgramCallSegment{segment_struct | parms: parms_encoded}, rest}
   end
