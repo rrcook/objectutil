@@ -122,9 +122,9 @@ defmodule ObjectTypes do
   end
 
   @evt_type_map %{
-    0x02 => EventType.INITIALIZER,
-    0x04 => EventType.POST_PROCESSOR,
-    0x08 => EventType.HELP_PROCESSOR
+    0x02 => ObjectTypes.EventType.INITIALIZER,
+    0x04 => ObjectTypes.EventType.POST_PROCESSOR,
+    0x08 => ObjectTypes.EventType.HELP_PROCESSOR
   }
 
   def event_type_map() do
@@ -132,8 +132,8 @@ defmodule ObjectTypes do
   end
 
   @pres_type_map   %{
-    0x01 => PresentationDataType.PD_NAPLPS,
-    0x02 => PresentationDataType.PD_ASCII
+    0x01 => ObjectTypes.PresentationDataType.PD_NAPLPS,
+    0x02 => ObjectTypes.PresentationDataType.PD_ASCII
   }
   def pdt_type_map() do
     @pres_type_map
